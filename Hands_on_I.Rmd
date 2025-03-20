@@ -22,6 +22,8 @@ The original dataset comes from [here](https://archive.ics.uci.edu/ml/datasets/H
 
 ```{r}
 
+# Load the dataset
+heart_data <- read.csv("/home/wael-badr/Desktop/UPF/2nd_trimester/DMI/assignment-1-OOWaelOO/data/heart_disease_dataset.csv", sep = " ", header = TRUE, stringsAsFactors = FALSE)
 
 
 ```
@@ -40,6 +42,65 @@ Using the supplementary material from the [Difference in mortality rates in hosp
 ## Reproduce Figure 1 from the publication
 
 ```{r}
+
+library(readxl)
+library(dplyr)
+library(lubridate)
+
+file_path <- "/home/wael-badr/Downloads/Table_1.XLSX"
+datos <- read_excel(file_path, sheet = "Datos")
+
+# Replace "NI" with NA for missing data
+datos <- datos %>%
+  mutate(across(everything(), ~na_if(., "NI")))
+
+# Convert date columns to Date format
+datos <- datos %>%
+  mutate(
+    `Syntoms onset` = ymd(`Syntoms onset`),
+    `Hospitalization date` = ymd(`Hospitalization date`)
+  )
+
+# Convert numeric columns to appropriate types
+numeric_columns <- c("BMI", "Days in ICU", "Days with ARDS", "Days with CRS",
+                     "Days with NIV", "Days with AMV", "Days of hospitalization")
+datos <- datos %>%
+  mutate(across(all_of(numeric_columns), as.numeric))
+
+# Standardize Yes/No columns as logical (TRUE/FALSE)
+yes_no_columns <- c("Admission to ICU", "ARDS Diagnosis", "CRS Diagnosis",
+                    "Use of NIV", "Use of AMV", "Death")
+datos <- datos %>%
+  mutate(across(all_of(yes_no_columns), ~case_when(
+    . == "Yes" ~ TRUE,
+    . == "No" ~ FALSE,
+    TRUE ~ NA
+  )))
+
+# Remove duplicate entries
+datos <- datos %>%
+  distinct()
+
+# Rename columns for clarity
+datos <- datos %>%
+  rename(
+    Symptoms_Onset = `Syntoms onset`,
+    Hospitalization_Date = `Hospitalization date`,
+    BMI = BMI,
+    Days_in_ICU = `Days in ICU`,
+    Days_with_ARDS = `Days with ARDS`,
+    Days_with_CRS = `Days with CRS`,
+    Days_with_NIV = `Days with NIV`,
+    Days_with_AMV = `Days with AMV`,
+    Hospitalization_Days = `Days of hospitalization`,
+    ICU_Admission = `Admission to ICU`,
+    ARDS = `ARDS Diagnosis`,
+    CRS = `CRS Diagnosis`,
+    NIV_Usage = `Use of NIV`,
+    AMV_Usage = `Use of AMV`,
+    Death = Death
+  )
+
 
 ```
 
