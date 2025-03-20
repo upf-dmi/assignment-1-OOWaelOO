@@ -1,0 +1,670 @@
+---
+title: "First hands-on for the DMI course"
+author: "Wael Badr and Xareni Reyes Soto"
+date: "Last update: `r format(Sys.time(), '%d %B, %Y')`"      
+output:
+  html_document:
+    toc: true
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# 1. Analysis of the Heart Disease Dataset 
+Load the data from
+[here](https://raw.githubusercontent.com/jpinero/DMI_2021/main/datasets/heart_disease_dataset.csv), and the description is [here](https://raw.githubusercontent.com/jpinero/DMI_2021/main/datasets/heart_disease_description.txt). 
+The original dataset comes from [here](https://archive.ics.uci.edu/ml/datasets/Heart+Disease) and corresponds to the [processed cleveland data](https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data)
+
+## Perform an EDA on the dataset
+
+As we saw in class, the major tasks during EDA are data cleaning, data integration, data reduction and data transformation. We will start by cleaning the data: we will handle missing data, check if there are inconsistencies with the data types, and identify and remove outliers.
+Data integration is not necessary for this exercise, since we are working with only one file.
+
+TODO: are data reduction (dimensionality reduction, numerosity reduction and datacompression) and data transformation (normalizing, scaling) applicable to this exercise?
+```{r}
+library(outliers)
+library(rmarkdown)
+
+# Read the table
+data_frame <- read.table("data/heart_disease_dataset.csv", header=TRUE, sep=" ")
+
+# The column patient_id works great as entity identifier. Rearrange the data so that this column is now the first
+data_frame <- data_frame[, c(ncol(data_frame), 1:(ncol(data_frame) - 1))]
+
+#Data Cleaning
+# 1. Check the data types
+# 2. Check for missing values
+# 3. Check for duplicate rows
+# 4. Check outliers and remove them
+# 5. Statistics summary
+
+# 1. Check the data types
+str(data_frame)
+
+# We notice that columns ca and thal have type 'char', so we need to convert them to integers for further processing and visualization
+data_frame$ca <- as.numeric(data_frame$ca) 
+data_frame$thal <- as.numeric(data_frame$thal)
+
+# We verify that the columns have the correct data types after the conversion
+str(data_frame)
+
+# 2. We check for missing values
+missing_counts <- colSums(is.na(data_frame))
+print(missing_counts)
+
+# There 4 'NA' values in ca and 2 'NA' values in thal. We choose to delete them. For this, we replace data_frame with a new version of the table with the NA rows removed
+data_frame <-  na.omit(data_frame)
+
+# 3. Check if there are any duplicate rows in the table
+any(duplicated(data_frame))     # returns FALSE
+
+# 4. We proceed to check if there are outliers using the IQR method: outliers as defined as values less than Q1 - 1.5*IQR or greater than Q3 + 1.5*IQR
+
+# Compute the 1st and 3rd quartiles (Q1 and Q3), using the apply function by columns
+Q1 <- apply(data_frame, 2, quantile, 0.25, na.rm=TRUE)
+Q3 <- apply(data_frame, 2, quantile, 0.75, na.rm=TRUE)
+
+# Compute the Interquartile range (IQR)
+IQR <- Q3 - Q1
+
+# Identify rows that contain at least one outlier, we use the apply function by rows to identify them
+outlier_rows <- apply(data_frame, 1, function(x) any(x < (Q1 - 1.5*IQR) | x > (Q3 + 1.5*IQR)))
+
+# Store outlier rows in a separate data frame
+outliers_df <- data_frame[outlier_rows, ]
+
+# Remove outliers by doing data_frame <- data_frame[! ... , ]
+data_frame <- data_frame[!outlier_rows, ]
+
+# 5. Summary statistics
+summary(data_frame)
+
+```
+Now that we cleaned the data, we proceed to do the Exploratory Data Analysis. We used the steps provided in [this guide](https://www.kaggle.com/code/georgyzubkov/heart-disease-exploratory-data-analysis).  
+
+The dataset contains 303 records, each variable has 15 fields. The dataset contains variables of different types:
+
+**- Discrete:**  
+  - `age`  
+  - `trestbps` (resting blood pressure, in mmHg on admission to the hospital)  
+  - `chol` (serum cholesterol levels)  
+  - `thalach` (maximum heart rate achieved)  
+  - `ca` (number of major vessels)  
+
+**- Continuous:**  
+  - `oldpeak` (ST depression induced by exercise relative to rest)  
+
+**- Categorical:**  
+  - `sex`  
+  - `cp` (chest pain type)  
+  - `fbs` (fasting blood sugar)  
+  - `restecg` (resting electrocardiographic results)  
+  - `exang` (exercise induced angina)  
+  - `slope` (the slope of ST segment during exercise)  
+  - `thal` (represents different types of thalassemia)  
+
+
+```{r}
+#XRS 1. Check the dataset for gaps in the data
+# Create a data frame for the missing values for plotting
+df_missing <- data.frame(Variable = names(missing_counts), Missing_Count = missing_counts)
+# Load ggplot2
+library(ggplot2)
+
+# Plot
+ggplot(df_missing, aes(x = reorder(Variable,-Missing_Count), y = Missing_Count)) +
+  geom_bar(stat = "identity", fill = "darkblue", alpha = 0.7)+
+  coord_flip() + # We flip the graph for improved readability
+  labs(title = "Check for gaps in our data",
+       x = "Variables",
+       y = "Missing values counts") +
+  theme_minimal()
+```
+We do have some missing values, but we removed them in the cleaning steps above.
+```{r}
+#XRS 2. Look at the distribution of the target variable: heart disease
+num_counts <- as.data.frame(table(data_frame$num))
+
+# Plot
+ggplot(num_counts, mapping = aes(x=Var1, y=Freq)) +
+  geom_bar(stat = "Identity", fill = "#6BACD0") +
+  labs(title = "Distribution of our target variable",
+       x = "num",
+       y = "Count") +
+  theme_minimal()
+```
+The sample seems to be unbalanced, with the majority of the patients being in the category 0 .
+```{r}
+# XRS 3: Indicate the types of variables (see paragraph above)
+# XRS 4: Look at unique values in the categorical objects
+unique(data_frame$sex)
+unique(data_frame$cp)
+unique(data_frame$fbs)
+unique(data_frame$restecg)
+unique(data_frame$exang)
+unique(data_frame$slope)
+unique(data_frame$thal)
+
+# WB 5: Analyze numerical variables (visualizing continuous columns)
+num_vars <- c("age", "trestbps", "chol", "thalach", "oldpeak")  
+cat_vars <- c("sex", "cp", "fbs", "restecg", "exang", "slope", "thal", "ca")  
+
+for (var in num_vars) {
+  print(
+    ggplot(data_frame, aes_string(x = var)) +
+      geom_histogram(fill = "blue", color = "black", alpha = 0.7, bins = 30) +  # Auto-adjust bins
+      labs(title = paste("Distribution of", var), x = var, y = "Count") +
+      theme_minimal()
+  )
+}
+```
+The distributions of age, cholesterol, and maximum heart rate appear roughly normal, while resting blood pressure shows multiple peaks, suggesting possibly different subgroups within the dataset. ST depression is highly right-skewed, with most values close to zero, indicating that significant ST depression is relatively rare in the dataset.
+```{r}
+# WB 6. Look at the distribution of number of people with heart disease from various factors
+# Get the number of unique values in num
+num_levels <- length(unique(data_frame$num))
+
+# Generate a color palette with enough colors
+color_palette <- scales::hue_pal()(num_levels)
+
+for (var in num_vars) {
+  print(
+    ggplot(data_frame, aes_string(x = "factor(num)", y = var, fill = "factor(num)")) +
+      geom_boxplot(alpha = 0.7, outlier.color = "red") +
+      scale_fill_manual(values = color_palette) +  # Use dynamic colors
+      labs(title = paste("Heart Disease vs", var), x = "Heart Disease (num)", y = var) +
+      theme_minimal()
+  )
+}
+```
+Thalach decreases, while oldpeak increases with heart disease severity, suggesting their strong predictive value. Age shows a slight upward trend, while trestbps and chol display high variability but no clear pattern.
+```{r}
+for (var in cat_vars) {
+  print(
+    ggplot(data_frame, aes_string(x = var, fill = "factor(num)")) +
+      geom_bar(position = position_dodge(width = 0.9)) +  # Improved positioning
+      labs(title = paste("Heart Disease Distribution by", var), x = var, y = "Count") +
+      theme_minimal()
+  )
+}
+```
+Heart disease is more prevalent in males, higher chest pain types, and abnormal thalassemia. Higher major vessels count (ca), slope, and exercise-induced angina (exang) also show trends linked to severity.
+```{r}
+# WB 7. Look at the distribution of categorical variables depending on gender
+for (var in cat_vars) {
+  print(
+    ggplot(data_frame, aes_string(x = var, fill = "factor(sex)")) +
+      geom_bar(position = position_dodge(width = 0.9)) +
+      labs(title = paste(var, "Distribution by Gender"), x = var, y = "Count") +
+      theme_minimal()
+  )
+}
+```
+Males dominate the dataset and have higher chest pain type, abnormal thalassemia, and major vessels (ca). Gender-based differences exist in exercise-induced angina and resting ECG, potentially impacting heart disease risk.
+```{r}
+# WB 8. Look at outliers in numerical values depending on several factors
+for (var in num_vars) {
+  print(
+    ggplot(data_frame, aes_string(x = "factor(num)", y = var, fill = "factor(num)")) +
+      geom_boxplot(alpha = 0.7, outlier.color = "red") +
+      scale_fill_manual(values = color_palette) +
+      labs(title = paste("Outliers in", var, "by Heart Disease"), x = "Heart Disease (num)", y = var) +
+      theme_minimal()
+  )
+}
+```
+Outliers are present in cholesterol, maximum heart rate (thalach), and ST depression (oldpeak), particularly in severe heart disease cases. Oldpeak increases with disease severity, while thalach decreases, reinforcing their potential as key indicators.
+```{r}
+for (var in num_vars) {
+  print(
+    ggplot(data_frame, aes_string(x = "factor(sex)", y = var, fill = "factor(sex)")) +
+      geom_boxplot(alpha = 0.7, outlier.color = "red") +
+      scale_fill_manual(values = c("#00BFC4", "#F8766D")) +
+      labs(title = paste("Outliers in", var, "by Gender"), x = "Gender (0 = Female, 1 = Male)", y = var) +
+      theme_minimal()
+  )
+}
+
+#CONCLUSION ---> e.g. from all the graphs presented, it can be concluded that e.g. "alcohol consumption and smoking are not the main factors in heart disease"
+
+
+```
+Outliers are minimal across genders, with males showing slightly higher oldpeak values and females exhibiting lower but more varied thalach. Other variables have similar distributions, suggesting gender differences may be less pronounced in outliers.
+
+
+Heart disease severity correlates with increasing oldpeak and decreasing thalach, with males, higher cp, thal 7, and ca > 0 more affected. Chol and trestbps show variability but are weaker predictors, while outliers have minimal impact on trends. Lifestyle factors like alcohol and smoking were not assessed.
+
+## Create visualizations in order to show which variables seem to be more associated with heart disease
+
+```{r}
+
+library(corrplot)
+library(dplyr)
+# Visualize Correlation Matrix
+# Select relevant columns
+selected_data <- data_frame[, c("num", "oldpeak", "age", "trestbps", "chol", "thalach")]
+
+# Ensure columns are numeric
+selected_data <- selected_data %>%
+  mutate(across(everything(), as.numeric))
+
+#correlation matrix with the numeric measurements
+cor_matrix <- cor(selected_data, method = "spearman")
+corrplot(cor_matrix, method = "color", type = "full", addCoef.col = "black",
+         tl.col = "black", tl.srt = 45, number.cex = 0.8)
+
+```
+
+
+# 2. Difference in mortality rates in hospitalized COVID-19 patients 
+Using the supplementary material from the [Difference in mortality rates in hospitalized COVID-19 patients identified by cytokine profile clustering using a machine learning approach: An outcome prediction alternative](https://www.frontiersin.org/articles/10.3389/fmed.2022.987182/full), perform the following tasks
+
+## Reproduce Figure 1 from the publication
+
+```{r}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(grid)
+
+table <- read_excel("data/Table_1.XLSX")
+
+# Figure 1, part 1
+# Standardize column names
+table <- table %>%
+  rename_with(~ gsub("\\s+", "_", .)) %>%
+  rename_with(tolower)
+
+# Step 1: Remove exact duplicate rows
+table_unique <- table %>% distinct()    # Two rows were removed
+
+# Further explore the data: check for duplicate ids in table_unique
+duplicates_table_unique_1 <- table_unique %>%
+  group_by(id) %>%
+  filter(n() > 1)
+
+```
+We identified 6 IDs that appear twice in the dataset, with different values for their corresponding measurements.
+Since we cannot determine which of the two entries is the correct or most reliable one, keeping them could introduce 
+inconsistencies and potential bias in the analysis.
+Rather than arbitrarily selecting one of the rows, we opt to remove these ambiguous cases to ensure data integrity.
+```{r}
+# Remove rows that share the exact same id
+table_unique <- table_unique %>%
+  group_by(id) %>%
+  filter(n() == 1) %>%
+  ungroup()
+
+# Create an Age Group column for plotting
+table_unique <- table_unique %>%
+  mutate(age_group = cut(age, breaks = seq(20, 100, by = 10), right = FALSE, include.lowest = TRUE))
+
+# Step 4: Create the histogram with adjustments for styling
+ggplot(data = table_unique, mapping = aes(x = age)) +
+  geom_histogram(
+    binwidth = 10,
+    color = "black",
+    fill = "#E0EEEE",
+    boundary = 20
+  ) +
+  scale_x_continuous(breaks = seq(20, 100, by = 10), limits = c(20, 100)) +
+  labs(
+    x = "Age (years)",
+    y = "Frequency (n)",
+    title = "Age"
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+  )
+
+# Figure 1, part 2
+# Define the table data
+data <- matrix(c("G1", "-",  "-",   "-",
+                 "G2", "-/+", "+/-", "-",
+                 "G3", "+",   "-",   "+",
+                 "G4", "-/+", "+",   "+"),
+               nrow = 4, ncol = 4, byrow = TRUE)
+
+colnames <- c("Clinical\nclassification", "NIV", "AMV", "ARDS")
+
+# Create the tableGrob
+table <- tableGrob(data,
+                   rows = NULL, # No row names
+                   cols = colnames)
+
+# Define the theme with alternating row colors and centered text
+theme <- ttheme_minimal(
+  core = list(
+    fg_params = list(hjust = 0.5, x = 0.5, fontsize = 12), # Center-align and font size
+    bg_params = list(fill = c(rep(c("white", "lightgray"), length.out = nrow(data))), 
+                     col = "white") # Alternating row colors with white gridlines
+  ),
+  colhead = list(
+    fg_params = list(fontsize = 14, fontface = "bold"), # Header style
+    bg_params = list(fill = "lightgray", col = "white") # Header background
+  )
+)
+
+# Recreate the table with the theme
+table <- tableGrob(data, rows = NULL, cols = colnames, theme = theme)
+
+# Add white lines (gridlines) between rows and columns
+table$grobs <- lapply(table$grobs, function(grob) {
+  if (inherits(grob, "rect")) {
+    grob$gp$col <- "white" # Set gridline color to white
+    grob$gp$lwd <- 2       # Set line width
+  }
+  return(grob)
+})
+
+# Add a title
+title <- textGrob("Definition of the clinical classification",
+                  gp = gpar(fontsize = 14, fontface = "bold"))
+
+# Combine title and table into a single plot with closer spacing
+grid.newpage()
+grid.arrange(table, ncol = 1)
+```
+```{r}
+#Figures 1c and 1d
+# Classify patients into G1, G2, G3, or G4
+table_unique <- table_unique %>%
+  mutate(
+    group = case_when(
+      use_of_niv == "No" & use_of_amv == "No" & days_with_ards == 0 ~ "G1",
+      days_with_ards == 0 ~ "G2",
+      use_of_niv == "Yes" & use_of_amv == "No" & days_with_ards > 0 ~ "G3",
+      use_of_amv == "Yes" & days_with_ards > 0 ~ "G4"
+    )
+  ) %>%
+  filter(!is.na(group))  # Remove NA values
+
+# Count patients in each group
+group_counts <- table_unique %>%
+  count(group)
+
+# Create Figure 1C - Clinical Classification Bar Plot
+fig_1c <- ggplot(group_counts, aes(x = group, y = n, fill = group)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  geom_text(aes(label = n), vjust = -0.5, size = 5, fontface = "plain") +  # Not bold
+  scale_fill_manual(values = c("G1" = "#76c7c0", "G2" = "#f6e58d", "G3" = "#a29bfe", "G4" = "#ff7675")) +
+  scale_y_continuous(breaks = seq(0, 80, by = 20), limits = c(0, 80)) +
+  labs(title = "Clinical classification", x = "Clinical classification", y = "Frequency (n)") +  
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(size = 12, face = "plain"),  
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    axis.line.x = element_blank(),  # Remove X-axis line
+    axis.ticks.x = element_blank(),  # Remove X-axis ticks
+    legend.position = "none",  # Remove legend
+    plot.margin = margin(20, 40, 20, 40)  # Increase width spacing
+  )
+
+# Count number of deaths
+vital_counts <- table_unique %>%
+  count(death) %>%
+  arrange(match(death, c("No", "Yes")))
+
+# Create Figure 1D - Vital Status Bar Plot
+fig_1d <- ggplot(vital_counts %>% filter(death %in% c("No", "Yes")), aes(x = death, y = n, fill = death)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  geom_text(aes(label = n), vjust = -0.2, size = 5, fontface = "plain") +  # Keep labels exactly on top
+  scale_fill_manual(values = c("No" = "#76c7c0", "Yes" = "#f6e58d")) +
+  scale_y_continuous(breaks = seq(0, 160, by = 50), limits = c(0, 160)) +  # Allow space for labels
+  labs(title = "Vital status", x = "Death", y = "Frequency (n)") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(size = 12, face = "plain"),
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    axis.line.x = element_blank(),  # Remove X-axis line
+    axis.ticks.x = element_blank(),  # Remove X-axis ticks
+    legend.position = "none",  # Remove legend
+    plot.margin = margin(20, 40, 20, 40)  # Adjust spacing
+  )
+
+
+# Display 1c, and 1d
+print(fig_1c)
+print(fig_1d)
+
+```
+
+
+## Reproduce Figure 2 from the publication
+but instead of representing the clusters in the annotation, represent the groups (G1 to G4)
+
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(pheatmap)
+
+# 1. Read the data from the Excel document
+raw_data <- read_excel("data/Table_2.XLSX", 1)
+
+# View the first few rows
+head(raw_data)
+
+# The first row contains a header
+colnames(raw_data) <- raw_data[1, ] # Set the first row as column names
+clean_data <- tail(raw_data,-1)      # Remove the first row
+
+# For more clarity, make sure the first column is named "id"
+colnames(clean_data)[1] <- "id"
+
+# Check data types of the data frame
+str(clean_data)           # All columns have type 'char'
+
+# 2. Transform cytokine data to numeric type for further processing
+numeric_columns <- colnames(clean_data)[2:ncol(clean_data)]                    # Select columns except for the first one (id)
+clean_data[numeric_columns] <- lapply(clean_data[numeric_columns], as.numeric) # Convert to numeric type, use the lapply function to apply as.numeric to each element of the numeric_columns
+# Verify the columns have the correct type
+str(clean_data)
+
+# 3. Handle multiple measurements per patient
+# First of all, remove leading/trailing spaces in id
+clean_data$id <- trimws(clean_data$id)
+
+# Then, fill in the missing id values for rows with 'NA' using the fill() function, for the 
+# data aggregation to work correctly
+clean_data <- clean_data %>%
+  fill(id, .direction = "down")
+
+# Some patients have multiple measurements, taken on different days. To aggregate their cytokine levels, we choose to replace multiple measurements by their mean
+aggregated_data <- clean_data %>%
+  group_by(id) %>%
+  summarise(across(everything(), ~mean(.x, na.rm = TRUE)))
+
+# Merge patient group information (G1-G4)
+aggregated_data <- left_join(aggregated_data, table_unique %>% select(id, group, death, gender), by = "id")
+
+# Function to normalize values between 0 (min) and 1 (max)
+min_max_norm <- function(x) {
+  return((x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
+}
+
+# Apply normalization to all cytokine columns except id, group, death, gender
+normalized_data <- aggregated_data %>%
+  mutate(across(-c(id, group, death, gender), min_max_norm))
+
+# Remove unnecessary columns and prepare the data for heatmap
+# Only keep the first 14 columns of the data frame, except column Day (which contain the cytokine measurements we are interested in plotting)
+new_aggregated_data <- select(aggregated_data, c(id, colnames(aggregated_data)[3:14], group))
+
+# Create annotation data frame for G1-G4 groups
+annotation_col_group <- data.frame(Group = factor(new_aggregated_data$group))
+
+# Define colors for the groups
+group_colors <- list(Group = c("G1" = "green", "G2" = "blue", "G3" = "red", "G4" = "purple"))
+
+# Make sure we are working with a data.frame and not a tibble
+new_aggregated_data <- as.data.frame(new_aggregated_data)
+# Set patient id as rownames
+rownames(new_aggregated_data) <- new_aggregated_data$id
+
+# Assign row names according to patient id
+rownames(annotation_col_group) <- new_aggregated_data$id 
+
+# Create heatmap
+# Convert to numeric matrix for heatmap, preserve patient id as row names
+data_matrix <- as.matrix(new_aggregated_data[,-c(1, ncol(new_aggregated_data))]) # Exclude patient id and group
+
+# Create an annotation table with group, death, and gender
+annotation_col <- data.frame(
+  Group = factor(normalized_data$group),
+  Death = factor(normalized_data$death, levels = c("No", "Yes")),
+  Gender = factor(normalized_data$gender, levels = c("Male", "Female"))
+)
+
+# Assign patient IDs as row names in the annotation table
+rownames(annotation_col) <- normalized_data$id
+
+# Define colors for the annotations
+annotation_colors <- list(
+  Group = c("G1" = "green", "G2" = "blue", "G3" = "red", "G4" = "purple"),
+  Death = c("No" = "lightblue", "Yes" = "darkblue"),
+  Gender = c("Male" = "gray", "Female" = "pink")
+)
+
+# Generate the heatmap
+pheatmap(
+  t(data_matrix),  # Transpose to have cytokines on the Y-axis
+  color = colorRampPalette(c("#FDF5EB", "#FD9C50","#8D2A08"))(100),  # Define heatmap colors
+  cluster_rows = TRUE,  
+  cluster_cols = TRUE,  
+  show_rownames = TRUE,  
+  show_colnames = FALSE,  
+  fontsize_row = 10,  
+  main = "Cytokine Expression Heatmap (Normalized)",  
+  annotation_col = annotation_col,  # Add Group, Death, and Gender annotations
+  annotation_colors = annotation_colors  # Use custom colors
+)
+
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+```
+
+## Improve figure 2 of the publication
+Add a second annotation with information of deathm and a third one with information of gender
+
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(pheatmap)
+library(fuzzyjoin)
+
+
+# 1. Read the data from the Excel document
+raw_data <- read_excel("data/Table_2.XLSX", 1)
+
+# View the first few rows
+head(raw_data)
+
+# The first row contains a header
+colnames(raw_data) <- raw_data[1, ] # Set the first row as column names
+clean_data <- tail(raw_data,-1)      # Remove the first row
+
+# For more clarity, make sure the first column is named "id"
+colnames(clean_data)[1] <- "id"
+
+# Check data types of the data frame
+str(clean_data)           # All columns have type 'char'
+
+# 2. Transform cytokine data to numeric type for further processing
+numeric_columns <- colnames(clean_data)[2:ncol(clean_data)]                    # Select columns except for the first one (id)
+clean_data[numeric_columns] <- lapply(clean_data[numeric_columns], as.numeric) # Convert to numeric type, use the lapply function to apply as.numeric to each element of the numeric_columns
+# Verify the columns have the correct type
+str(clean_data)
+
+# 3. Handle multiple measurements per patient
+# First of all, remove leading/trailing spaces in id
+clean_data$id <- trimws(clean_data$id)
+
+# Then, fill in the missing id values for rows with 'NA' using the fill() function, for the
+# data aggregation to work correctly
+clean_data <- clean_data %>%
+  fill(id, .direction = "down")
+
+# Some patients have multiple measurements, taken on different days. To aggregate their cytokine levels, we choose to replace multiple measurements by their mean
+aggregated_data <- clean_data %>%
+  group_by(id) %>%
+  summarise(across(everything(), ~mean(.x, na.rm = TRUE)))
+
+# Merge patient group information (G1-G4)
+aggregated_data <- left_join(aggregated_data, table_unique %>% select(id, group), by = "id")
+
+# Scale each cytokine between 0 (min) and 1 (max)
+min_max_norm <- function(x) {
+  return((x - min(x, na.rm = TRUE))/(max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
+}
+
+# Apply normalization to all cytokine columns (except for id)
+normalized_data <- aggregated_data %>%
+  mutate(across(-c(id, group), min_max_norm))
+
+# Remove unnecessary columns and prepare the data for heatmap
+# Only keep the first 14 columns of the data frame, except column Day (which contain the cytokine measurements we are interested in plotting)
+new_normalized_data <- select(normalized_data, c(id, colnames(normalized_data)[3:14], group))
+
+# Create annotation data frame for G1-G4 groups
+annotation_col_group <- data.frame(Group = factor(new_normalized_data$group))
+
+# Define colors for the groups
+group_colors <- list(Group = c("G1" = "green", "G2" = "blue", "G3" = "red", "G4" = "purple"))
+
+# Make sure we are working with a data.frame and not a tibble
+new_normalized_data <- as.data.frame(new_normalized_data)
+# Set patient id as rownames
+rownames(new_normalized_data) <- new_normalized_data$id
+
+# Assign row names according to patient id
+rownames(annotation_col_group) <- new_normalized_data$id 
+
+# Create heatmap
+# Convert to numeric matrix for heatmap, preserve patient id as row names
+data_matrix <- as.matrix(new_normalized_data[,-c(1, ncol(new_normalized_data))]) # Exclude patient id and group
+
+# Generate the heatmap
+pheatmap(t(data_matrix),
+         color = colorRampPalette(c("#FDF5EB", "#FD9C50","#8D2A08"))(100),
+         cluster_rows = TRUE,
+         cluster_cols = TRUE,
+         show_rownames = TRUE,
+         show_colnames = FALSE,
+         fontsize_row = 10,
+         main = "Cytokine Expression Heatmap (Relative Expression)",
+         annotation_col = annotation_col_group,  
+         annotation_colors = group_colors)
+
+```
+
+
+# session info {.unnumbered}
+
+```{r, results='asis',  echo=FALSE, message=FALSE }
+sessionInfo()
+```
